@@ -108,8 +108,8 @@ dbfile = tempfile.NamedTemporaryFile()
 dbfile.write(dbdata.read())
 
 # Sync temp file, just to be sure
-os.fdatasync(dbfile)
-os.fsync(dbfile)
+dbfile.flush()
+os.fsync(dbfile.fileno())
 
 # Open DB
 db = sqlite3.connect(dbfile.name)
