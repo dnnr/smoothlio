@@ -1,0 +1,250 @@
+#!/usr/bin/env python3
+
+TBP_DIR = '~/TitaniumMediaSync/lgg4/sdcard/Android/data/com.keramidas.TitaniumBackup/TitaniumBackup'
+DBFILE_IN_BACKUP = 'data/data/com.kajda.fuelio/./databases/fuelio.db'
+OUTFILE = '/tmp/smoothlio.png'
+
+import sqlite3
+import tarfile
+import tempfile
+import os
+import math
+import glob
+
+import matplotlib
+
+# Set backend:
+#  matplotlib.use('PDF')
+#  matplotlib.use('cairo')
+matplotlib.use('agg')
+
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
+import numpy as np
+
+# For debugging:
+from pprint import pprint
+#  from pprint import pformat
+
+
+def lagging_average(x, n):
+    """
+    Computes a 'lagging' moving average with proper handling of boundary
+    effects.
+    For irregular input data, this seems the most useful notion of a moving
+    average, answering the question of the mean of the last n values for any
+    given point in the data set.
+    The left-side boundary effects are addressed by shrinking the window as
+    necessary.
+
+    This implementation is not optimized for performance.
+    """
+    x = np.asarray(x)
+    ret = np.empty(len(x))
+
+    for i in range(0, len(x)):
+        win_start = max(0, i - n + 1)
+        win_end = i + 1
+        ret[i] = np.mean(x[win_start:win_end])
+
+    return ret
+
+
+def moving_average_convolve(x, n, type='simple', mode='valid'):
+    """
+    Compute a moving average using numpy.convolve.
+
+    type is 'simple' | 'exponential'
+    """
+    x = np.asarray(x)
+    if type == 'simple':
+        weights = np.ones(n)
+    else:
+        weights = np.exp(np.linspace(-1., 0., n))
+
+    weights /= weights.sum()
+
+    # Address boundary effects by extending the input data with repetitions of
+    # the first/last value. Use exactly as many values for that extension as
+    # are dropped from x by using the "valid" convolve mode. Then prepend the
+    # floored half of it and append the ceiled half.
+    nextend = n - 1
+    x = np.append(np.repeat(x[0], math.floor(nextend / 2)), x)
+    x = np.append(x, np.repeat(x[-1], math.ceil(nextend / 2)))
+
+    a = np.convolve(x, weights, mode=mode)
+
+    return a
+
+
+def moving_average_looping(x, n):
+    """
+    Compute a moving average by simply looping.
+
+    On the boundaries, the window is shrunken as necessary.
+    """
+    x = np.asarray(x)
+    ret = np.empty(len(x))
+
+    for i in range(0, len(x)):
+        win_start = max(0, i - math.ceil(n / 2) + 1)
+        win_end = min(len(x), i + math.floor(n / 2) + 1)
+        ret[i] = np.mean(x[win_start:win_end])
+
+    return ret
+
+# Find most recent backup tarball
+tarballs = sorted(glob.glob(os.path.join(os.path.expanduser(TBP_DIR),
+                                        'com.kajda.fuelio-*.tar.gz')))
+if len(tarballs) == 0:
+    raise SystemExit("Error: No backup files found")
+
+# Extract DB from backup tarball
+backup = tarfile.open(tarballs[-1], 'r')
+dbdata = backup.extractfile(backup.getmember(DBFILE_IN_BACKUP))
+
+# Write DB to temporary file (needed for sqlite3 module)
+dbfile = tempfile.NamedTemporaryFile()
+dbfile.write(dbdata.read())
+
+# Sync temp file, just to be sure
+os.fdatasync(dbfile)
+os.fsync(dbfile)
+
+# Open DB
+db = sqlite3.connect(dbfile.name)
+db.row_factory = sqlite3.Row
+dbc = db.cursor()
+
+# Get number of full fillups entries to initialize data array
+dbc.execute('select count(*) from Log where Full == 1')
+fullcount = dbc.fetchone()[0]
+
+fillups = np.recarray((fullcount, ), dtype=[
+    ('date', 'S10'),
+    ('odo', int),
+    ('fuel', float),
+    ])
+
+# Get list of fillup
+dbc.execute("select Data,Odo,Fuel,Full from Log")
+logentries = dbc.fetchall()
+
+# Merge partial into full fillups
+accu = 0
+idx = 0
+for e in logentries:
+    if e['Full'] != 1:
+        accu += e['Fuel']
+    else:
+        fillups[idx].date = e['Data']
+        fillups[idx].odo = e['Odo']
+        fillups[idx].fuel = accu + e['Fuel']
+        accu = 0
+        idx += 1
+
+
+# Calculate distance driven between fillups
+ododelta = np.diff(fillups.odo)
+
+# Calculate consumption in l/100km (skip invalid first entry; only provides
+# initial odo value)
+consumption = fillups[1:].fuel * 100 / ododelta
+
+xvalues = fillups.odo[1:]
+
+# XXX: Only use odd window lengths! Otherwise using the original xvalues to
+# plot the moving average is even more wrong than it already is due to its
+# non-uniform distribution.
+
+
+# UNUSED REPRESENTATION: Interpolate values with spline
+#  from scipy.interpolate import spline
+#  xvalues_smooth = np.linspace(xvalues.min(), xvalues.max(), 500)
+#  splineconsumption = spline(xvalues, moving_average_convolve(consumption, 3), xvalues_smooth)
+#  ax.plot(xvalues_smooth, splineconsumption)
+
+
+# UNUSED REPRESENTATION: Fit values to polynomial as a trendline
+#  z = np.polyfit(xvalues, moving_average_convolve(consumption, 3), deg=3)
+#  p = np.poly1d(z)
+#  ax.plot(xvalues, p(xvalues), 'r-', color='green', alpha=0.5, label='3-deg polynomial fit')
+
+
+# UNUSED REPRESENTATION: Compute cumulative mean
+#  cummean = avgconsumption.cumsum() / np.arange(1, len(avgconsumption) + 1)
+#  ax.plot(xvalues, cummean, color='brown', label='cumulative mean')
+
+
+# Set up figure
+fig = plt.figure(1, figsize=(17, 7), tight_layout=True)
+ax = fig.add_subplot(111)
+ax.margins(x=0.01, y=.05, tight=True)
+
+# Set title, customize position
+plt.title('Fuel Consumption', fontweight='bold')
+ax.title.set_position([.5, 1.05])
+
+ax.set_xlabel('Odometer in km')
+ax.set_ylabel('Consumption in l/100km')
+
+# Configure background grid
+ax.yaxis.grid(which='major', linestyle='-', alpha=.1, linewidth=1.5)
+ax.yaxis.grid(which='minor', linestyle='-', alpha=.05, linewidth=1)
+
+# Enable (and customize) minor ticks
+ax.yaxis.set_minor_locator(mticker.AutoMinorLocator(4))
+ax.xaxis.set_minor_locator(mticker.AutoMinorLocator())
+
+# Show y-axis labels on the right, too
+ax.tick_params(labelright=True)
+
+# Print x-axis tick labels with thousands separator
+ax.xaxis.set_major_formatter(
+            matplotlib.ticker.FuncFormatter(lambda x, p: format(int(x), ',')))
+
+ax.plot(xvalues, consumption, label='raw data',
+        linestyle='dashed', linewidth=2, alpha=.3, color='sienna', dash_capstyle='round',
+        marker='o', markerfacecolor='red',
+        )
+
+def plotmavg(win, annotate=False, **kwargs):
+    avg = lagging_average(consumption, win)
+    ax.plot(xvalues, avg,
+            label='last-{} average'.format(win),
+            solid_capstyle='round',
+            **kwargs)
+    if annotate:
+        lastx = xvalues[-1]
+        lasty = avg[-1]
+        color='darkslategray'
+        ax.annotate("{:.2f} l/100km".format(lasty), fontweight='bold',
+                    color=color,
+                    xy=(lastx, lasty),
+                    xytext=(0.9, 0.7), textcoords='figure fraction',
+                    arrowprops=dict(arrowstyle="fancy",
+                                    connectionstyle="arc3,rad=-0.2",
+                                    edgecolor='none',
+                                    facecolor=color,
+                                    ),
+                    )
+
+
+plotmavg(3, alpha=.5, linewidth=3, color='dodgerblue')
+plotmavg(9, annotate=True, alpha=.7, linewidth=5, color='steelblue')
+
+
+#  mavgwin = 9
+#  ax.plot(xvalues, lagging_average(consumption, mavgwin),
+        #  marker='.', label='last-{} average'.format(mavgwin), linewidth=7, alpha=.3)
+#  ax.plot(xvalues, moving_average_convolve(consumption, mavgwin),
+        #  marker='.', label='{}-value mavg (convolve)'.format(mavgwin), linewidth=7, alpha=.3)
+#  ax.plot(xvalues, moving_average_looping(consumption, mavgwin),
+        #  marker='.', label='{}-values mavg (loop)'.format(mavgwin), linewidth=7, alpha=.3)
+
+
+# Add legend (has to come after plot() calls)
+ax.legend(loc='upper left')
+
+# Draw and store figure
+plt.savefig(OUTFILE)
