@@ -127,7 +127,7 @@ fillups = np.recarray((fullcount, ), dtype=[
     ])
 
 # Get list of fillup
-dbc.execute("select Data,Odo,Fuel,Full from Log")
+dbc.execute("select Data,Odo,Fuel,Full from Log order by Odo asc")
 logentries = dbc.fetchall()
 
 # Merge partial into full fillups
