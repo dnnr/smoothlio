@@ -3,6 +3,7 @@
 TBP_DIR = '~/TitaniumMediaSync/lgg4/sdcard/Android/data/com.keramidas.TitaniumBackup/TitaniumBackup'
 DBFILE_IN_BACKUP = 'data/data/com.kajda.fuelio/./databases/fuelio.db'
 OUTFILE = '/tmp/smoothlio.png'
+CARID = 1
 
 import sqlite3
 import tarfile
@@ -108,8 +109,8 @@ dbfile = tempfile.NamedTemporaryFile()
 dbfile.write(dbdata.read())
 
 # Sync temp file, just to be sure
-os.fdatasync(dbfile)
-os.fsync(dbfile)
+dbfile.flush()
+os.fsync(dbfile.fileno())
 
 # Open DB
 db = sqlite3.connect(dbfile.name)
@@ -117,7 +118,7 @@ db.row_factory = sqlite3.Row
 dbc = db.cursor()
 
 # Get number of full fillups entries to initialize data array
-dbc.execute('select count(*) from Log where Full == 1')
+dbc.execute('select count(*) from Log where Full = 1 and CarID = ?', (CARID,))
 fullcount = dbc.fetchone()[0]
 
 fillups = np.recarray((fullcount, ), dtype=[
@@ -127,7 +128,7 @@ fillups = np.recarray((fullcount, ), dtype=[
     ])
 
 # Get list of fillup
-dbc.execute("select Data,Odo,Fuel,Full from Log")
+dbc.execute("select Data,Odo,Fuel,Full from Log where CarID = ? order by Odo asc", (CARID,))
 logentries = dbc.fetchall()
 
 # Merge partial into full fillups
