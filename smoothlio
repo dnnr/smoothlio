@@ -222,9 +222,9 @@ def plotmavg(win, annotate=False, **kwargs):
         ax.annotate("{:.2f} l/100km".format(lasty), fontweight='bold',
                     color=color,
                     xy=(lastx, lasty),
-                    xytext=(0.9, 0.7), textcoords='figure fraction',
+                    xytext=(0.9, 0.5), textcoords='figure fraction',
                     arrowprops=dict(arrowstyle="fancy",
-                                    connectionstyle="arc3,rad=-0.2",
+                                    connectionstyle="arc3,rad=0.2",
                                     edgecolor='none',
                                     facecolor=color,
                                     ),
@@ -243,9 +243,11 @@ plotmavg(9, annotate=True, alpha=.7, linewidth=5, color='steelblue')
 #  ax.plot(xvalues, moving_average_looping(consumption, mavgwin),
         #  marker='.', label='{}-values mavg (loop)'.format(mavgwin), linewidth=7, alpha=.3)
 
+# Make y-axis start at zero (has to come after plot() calls)
+ax.set_ylim(ymin=0)
 
 # Add legend (has to come after plot() calls)
-ax.legend(loc='upper left')
+ax.legend(loc='lower right')
 
 # Draw and store figure
 plt.savefig(OUTFILE)
