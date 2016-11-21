@@ -193,7 +193,10 @@ ax.set_xlabel('Odometer in km')
 ax.set_ylabel('Consumption in l/100km')
 
 # Add footnote
-footnote = "Latest datapoint: {}".format(latest_date.strftime('%a, %d. %b %Y'))
+footnote = "{}\n(latest datapoint: {})".format(
+        datetime.today().strftime('%Y-%m-%d, %H:%M:%S'),
+        latest_date.strftime('%a, %d. %b %Y'),
+        )
 plt.figtext(.995, .01, footnote, horizontalalignment='right', color='gray')
 
 # Configure background grid

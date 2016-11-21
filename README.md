@@ -12,4 +12,3 @@ Input parameters are to be set within the script.
 ## Future Work
 
 * Add secondary x-axis with dates as labels
-* Include generation timestamp in image
