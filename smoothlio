@@ -11,6 +11,7 @@ import tempfile
 import os
 import math
 import glob
+from datetime import datetime
 
 import matplotlib
 
@@ -154,6 +155,8 @@ consumption = fillups[1:].fuel * 100 / ododelta
 
 xvalues = fillups.odo[1:]
 
+latest_date = datetime.strptime(fillups[-1].date.decode(), '%Y-%m-%d')
+
 # XXX: Only use odd window lengths! Otherwise using the original xvalues to
 # plot the moving average is even more wrong than it already is due to its
 # non-uniform distribution.
@@ -188,6 +191,10 @@ ax.title.set_position([.5, 1.05])
 
 ax.set_xlabel('Odometer in km')
 ax.set_ylabel('Consumption in l/100km')
+
+# Add footnote
+footnote = "Latest datapoint: {}".format(latest_date.strftime('%a, %d. %b %Y'))
+plt.figtext(.995, .01, footnote, horizontalalignment='right', color='gray')
 
 # Configure background grid
 ax.yaxis.grid(which='major', linestyle='-', alpha=.1, linewidth=1.5)
