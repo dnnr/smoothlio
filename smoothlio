@@ -4,10 +4,11 @@ BACKUP_FILE = '~/FolderSync/lgg4/internal/Fuelio/backup-local/vehicle-2-local.cs
 OUTFILE = '/tmp/smoothlio.png'
 
 import csv
-import sys
-import os
-import math
 import glob
+import math
+import os
+import re
+import sys
 from datetime import datetime
 
 import matplotlib
@@ -125,6 +126,7 @@ fillups = np.recarray((len(logentries), ), dtype=[
     ('date', 'S10'),
     ('odo', int),
     ('consumption', float),
+    ('tripcompavg', float),
     ])
 
 for idx, e in enumerate(logentries):
@@ -132,9 +134,14 @@ for idx, e in enumerate(logentries):
     fillups[idx].odo = e['Odo (km)']
     fillups[idx].consumption = e['l/100km (optional)']
 
+    # Extract trip computer value from note (manually entered)
+    match = re.search('^([0-9]+\.[0-9]+) ', e['Notes (optional)'])
+    fillups[idx].tripcompavg = float(match.group(1)) if match else 0
+
 fillups.sort(order='date')
 
 consumption = fillups.consumption
+tripcompavg = fillups.tripcompavg
 xvalues = fillups.odo
 
 latest_date = datetime.strptime(fillups[-1].date.decode(), '%Y-%m-%d')
@@ -199,6 +206,11 @@ ax.xaxis.set_major_formatter(
 ax.plot(xvalues, consumption, label='raw data',
         linestyle='dashed', linewidth=2, alpha=.3, color='sienna', dash_capstyle='round',
         marker='o', markerfacecolor='red',
+        )
+
+ax.plot(xvalues, tripcompavg, label='trip comp value',
+        linestyle='dashed', linewidth=2, alpha=.3, color='green', dash_capstyle='round',
+        marker='o', markerfacecolor='green',
         )
 
 def plotmavg(win, annotate=False, **kwargs):
