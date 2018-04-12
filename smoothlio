@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
 
-TBP_DIR = '~/TitaniumMediaSync/lgg4/sdcard/Android/data/com.keramidas.TitaniumBackup/TitaniumBackup'
-DBFILE_IN_BACKUP = 'data/data/com.kajda.fuelio/./databases/fuelio.db'
+BACKUP_FILE = '~/FolderSync/lgg4/internal/Fuelio/backup-local/vehicle-2-local.csv'
 OUTFILE = '/tmp/smoothlio.png'
-CARID = 1
 
-import sqlite3
-import tarfile
-import tempfile
+import csv
+import sys
 import os
 import math
 import glob
@@ -95,65 +92,50 @@ def moving_average_looping(x, n):
 
     return ret
 
-# Find most recent backup tarball
-tarballs = sorted(glob.glob(os.path.join(os.path.expanduser(TBP_DIR),
-                                        'com.kajda.fuelio-*.tar.gz')))
-if len(tarballs) == 0:
-    raise SystemExit("Error: No backup files found")
+csvfile = os.path.join(os.path.expanduser(BACKUP_FILE))
 
-# Extract DB from backup tarball
-backup = tarfile.open(tarballs[-1], 'r')
-dbdata = backup.extractfile(backup.getmember(DBFILE_IN_BACKUP))
+if not os.path.isfile(csvfile):
+    print("File not found: {}".format(csvfile), file=sys.stderr)
+    sys.exit(1)
 
-# Write DB to temporary file (needed for sqlite3 module)
-dbfile = tempfile.NamedTemporaryFile()
-dbfile.write(dbdata.read())
+rawlines = []
+with open(csvfile) as csvfh:
+    rawlines = [l.strip() for l in csvfh.readlines()]
 
-# Sync temp file, just to be sure
-dbfile.flush()
-os.fsync(dbfile.fileno())
+# File contains multiple tables, each with a header looking like this:
+# "## The name of the table"
+logstart = None
+logend = -1
+for idx, line in enumerate(rawlines):
+    if line == '"## Log"':
+        logstart = idx + 1
+    elif line.startswith('"## ') and logstart is not None:
+        logend = idx - 1
+if logstart is None:
+    print("Could not find log table in CSV file", file=sys.stderr)
+    sys.exit(1)
 
-# Open DB
-db = sqlite3.connect(dbfile.name)
-db.row_factory = sqlite3.Row
-dbc = db.cursor()
+loglines = rawlines[logstart:logend]
+logentries = list(csv.DictReader(loglines))
 
-# Get number of full fillups entries to initialize data array
-dbc.execute('select count(*) from Log where Full = 1 and CarID = ?', (CARID,))
-fullcount = dbc.fetchone()[0]
+# Strip partial fillups (they're included in the next full fillup)
+logentries = [e for e in logentries if e['Full'] == '1']
 
-fillups = np.recarray((fullcount, ), dtype=[
+fillups = np.recarray((len(logentries), ), dtype=[
     ('date', 'S10'),
     ('odo', int),
-    ('fuel', float),
+    ('consumption', float),
     ])
 
-# Get list of fillup
-dbc.execute("select Data,Odo,Fuel,Full from Log where CarID = ? order by Odo asc", (CARID,))
-logentries = dbc.fetchall()
+for idx, e in enumerate(logentries):
+    fillups[idx].date = e['Data']
+    fillups[idx].odo = e['Odo (km)']
+    fillups[idx].consumption = e['l/100km (optional)']
 
-# Merge partial into full fillups
-accu = 0
-idx = 0
-for e in logentries:
-    if e['Full'] != 1:
-        accu += e['Fuel']
-    else:
-        fillups[idx].date = e['Data']
-        fillups[idx].odo = e['Odo']
-        fillups[idx].fuel = accu + e['Fuel']
-        accu = 0
-        idx += 1
+fillups.sort(order='date')
 
-
-# Calculate distance driven between fillups
-ododelta = np.diff(fillups.odo)
-
-# Calculate consumption in l/100km (skip invalid first entry; only provides
-# initial odo value)
-consumption = fillups[1:].fuel * 100 / ododelta
-
-xvalues = fillups.odo[1:]
+consumption = fillups.consumption
+xvalues = fillups.odo
 
 latest_date = datetime.strptime(fillups[-1].date.decode(), '%Y-%m-%d')
 
