@@ -203,12 +203,12 @@ ax.tick_params(labelright=True)
 ax.xaxis.set_major_formatter(
             matplotlib.ticker.FuncFormatter(lambda x, p: format(int(x), ',')))
 
-ax.plot(xvalues, consumption, label='raw data',
+ax.plot(xvalues, consumption, label='Fuelio values',
         linestyle='dashed', linewidth=2, alpha=.3, color='sienna', dash_capstyle='round',
         marker='o', markerfacecolor='red',
         )
 
-ax.plot(xvalues, tripcompavg, label='trip comp value',
+ax.plot(xvalues, tripcompavg, label='Trip computer values',
         linestyle='dashed', linewidth=2, alpha=.3, color='green', dash_capstyle='round',
         marker='o', markerfacecolor='green',
         )
