@@ -139,7 +139,7 @@ for idx, e in enumerate(logentries):
 
     # Extract trip computer value from note (manually entered)
     match = re.search('^([0-9]+\.[0-9]+) ', e['Notes (optional)'])
-    fillups[idx].tripcompavg = float(match.group(1)) if match else 0
+    fillups[idx].tripcompavg = float(match.group(1)) if match else None
 
 fillups.sort(order='date')
 
