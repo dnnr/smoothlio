@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-BACKUP_FILE = '~/FolderSync/nokia7plus/internal/Fuelio/backup-local/vehicle-2-local.csv'
+BACKUP_FILE = '~/FolderSync/nokia7plus/internal/Fuelio/backup-csv/car2-20190415-213127.csv'
 OUTFILE = '/tmp/smoothlio.png'
 
 import csv
