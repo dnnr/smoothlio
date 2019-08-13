@@ -134,7 +134,7 @@ fillups = np.recarray((len(logentries), ), dtype=[
 
 for idx, e in enumerate(logentries):
     fillups[idx].date = e['Data']
-    fillups[idx].odo = e['Odo (km)']
+    fillups[idx].odo = float(e['Odo (km)'])
     fillups[idx].consumption = e['l/100km (optional)']
 
     # Extract trip computer value from note (manually entered)
